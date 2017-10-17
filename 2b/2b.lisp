@@ -12,7 +12,9 @@
 (defstruct vs
   (matrix nil)
   (similarity-fn nil)
-  (similarity-matrix nil))
+  (similarity-matrix nil)
+  (classes)
+  (rocchio))
 
 ;;;; 2b)
 
@@ -221,7 +223,7 @@
     (let((vec (gethash word1 mat)))
       (gethash word2 vec))))
 
-(print(get-proximities space-vs "potato" "food"))
+;(print(get-proximities space-vs "potato" "food"))
 
 
 ;;;;1b
@@ -239,8 +241,65 @@
 	(setf sorted (sort unsorted #'>))	
 	(loop
 	   :for i from 1 to k
-	   :do (print (nth (position (nth i sorted) unsorted  ) words))
+	   :collect (nth (position (nth i sorted) unsorted  ) words)
 	   )))))
-(knn space-vs "potato" 20)
 
+;(print(knn space-vs "potato" 20))
 ;;;;2a
+(defun normalize_word (string)
+  (setf string (remove-if-not #'alphanumericp (string-downcase string))))
+
+
+(defun read-classes (filename)
+  (with-open-file (in filename :direction :input)
+    (let(( classes (make-hash-table :test #'equal)))
+      (loop
+	 :for i = (read in nil nil)  
+	 while i
+	 :do (setf(gethash  (normalize_word (car i) )  classes)
+		  (mapcar #'normalize_word (car(cdr i) ))))
+      (setf (vs-classes space-vs) classes))))
+
+(read-classes "classes.txt")
+
+;;;; 2b 2b
+
+;;;; this task requires me to create a "vector add" function
+;;;; and a normalize-centroids function (based on normalizing a matrix in oblig2a)
+
+(defun normalize-centroids (centroids)   ;vector space struct as argument
+    (loop for centroid being the hash-values of centroids  ;;for centroid
+       :do (let((norm (euclidean-norm centroid) ))         ;;define norm
+	     (loop for key being the hash-keys of centroid ;;for value in vectot
+		:do (setf (gethash key centroid) (/  (gethash key centroid) norm))))) ;;divide every value with norm
+    centroids)             ;;return normalized matrix into vector space, space-vs
+
+
+(defun vector-add (v1 v2) ;;Having this guy makes the centroids easier to compute
+  (let (( v3 (make-hash-table :test #'equal)))
+    (loop for keys being the hash-keys in v2	 
+       :do (if (gethash keys v1) (setf (gethash keys v3) (+ (gethash keys v1) (gethash keys v2))))
+       :do (unless (gethash keys v1) (setf (gethash keys v3) (gethash keys v2))))
+    (loop for keys being the hash-keys in v1	 
+       :do (if (gethash keys v2) (setf (gethash keys v3) (+ (gethash keys v1) (gethash keys v2))))
+       :do (unless (gethash keys v2) (setf (gethash keys v3) (gethash keys v1))))v3))
+
+(defun compute-class-centroids (space)
+  (let ((centroids (make-hash-table :test #'equal)))
+    (let ((class-hash (vs-classes space)))
+      (let ((feature-vectors (vs-matrix space)))
+	(loop
+	   :for class being the hash-keys in class-hash
+	   :do (setf (gethash class centroids) (let (( feat-vec (make-hash-table :test #'equal)))
+						 (loop
+						    :for word in (gethash class class-hash)
+						    :for vec = (vector-add feat-vec (gethash word feature-vectors))
+						    :then (vector-add vec (gethash word feature-vectors))
+						    :do (setf feat-vec vec))(/ feat-vec (length  (gethash class class-hash) )) )))))
+    
+    (let (( centroids (normalize-centroids centroids)))
+      (setf (vs-rocchio space-vs) centroids))))
+
+;;;;2c
+(defun rocchio-classify (space)
+  (let (( centroids  (vs-rocchio space)))
