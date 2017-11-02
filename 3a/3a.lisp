@@ -1,0 +1,251 @@
+;;;; 1a
+;;;;we are given 9 tags with our sentence:
+;;;;RB , NNP POS NN VBZ VBG VBN .
+
+;;;; 1a)i) P(t|RB) is the probability of a RB being followed by a tag t,
+;;;; where t is any of the 9 tags above.
+;;;; there are 4 instances of RB showing up and the tags followed by each is
+;;;; (,) twice
+;;;; (RB) once and
+;;;; (.) once.
+;;;; 4 instances, where comma (,) claims two of them means that there is a
+;;;; 50% chance for P(,|RB) and 25% for P(RB|RB) and P(.|RB).
+
+;;;; 1a)ii)
+;;;; There are zero instances of move being tagged as NNP, this gives us
+;;;; a zero probability for P(move|NNP).
+
+;;;; There is only one instance of a common noun (NN) -
+;;;; and its observed word value is "move", meaning that P(move|NN) = 1
+
+;;;; P(well|RB) is an instance of 1 in 4 RBs, giving us a 1/4 chance that
+;;;; the word connected to the RB tag will be "well".
+
+;;;; 1b)
+;;;; The language models we're creating tries to define context with
+;;;; co-occurences. Problem is, not all corpuses and context definitions
+;;;; are a good representation for the relations between words in a
+;;;; language. Smoothing is the appliance of "extra" co-occurence counts
+;;;; where none were observed. An example is a special case of the Laplace
+;;;; smoothing, called add-one smoothing. Here, you turn every 0 in your
+;;;; co-occurence matrix into a 1 before normalizing.
+
+;;;; The P(t|RB) values in 1a)i) look slightly different after applying
+;;;; Laplace/add-one smoothing.
+;;;; P_Smooth(t|RB) = (C(t|RB) + 1) / (C(RB) + 1*C(t))
+;;;; Above, you see the laplace smoothing formula where alpha is set to 1.
+;;;; C() is a counting function, meaning C(RB) = 4 occurences, and C(t)
+;;;; = 9 tags. 
+
+;;;; Before, P(,|RB) was 1/2. Now, P_smooth(,|RB) = (2+1)/(4+9) = 3/13
+
+;;;; Before, P(RB|RB) and P(.|RB) were 1/4, now: (1+1)/13 = 2/13
+;;;; These 3 tags now accumulate to P_s(,|RB) + P_s(RB|RB) + P_s(.|RB) = 7/13
+;;;; It is perhaps easy to now see that our remaining 6 tags have a uniform
+;;;; 1/13th of chance to occur after the RB tag, although they don't do so 
+;;;; in our example sentence.
+
+;;;; 1b)2) <NN,POS> = P(POS,NN) = P(NN|POS) * P(POS) 
+;;;;                = 1 * P(POS) =  1/13           (since pos's 1 of 13 tags)
+;;;; The above calculation disregards the order of the tags.
+;;;; If we want the probability of NN followed by POS, then P = 0 since this is
+;;;; the opposite of the order in which the tags occur. How I've undestood it,
+;;;; however, is that Bigrams seem to ignore order.
+
+;;;; 1c)
+;;;; Viterbi algorithm find the optimal (most probable) sequence of states
+;;;; without having to account for all permutations of the problem's states.
+;;;; The way the algorithm does this for HMMs is that it leaves out the less
+;;;; probable state-transition sequences that leads to the same observational
+;;;; point. This is a form of dynamic programming.
+
+;;;; A cell in a trelli diagram depicts a state. The cells before it
+;;;; compose multiple sequences of states which all can lead up to this state.
+;;;; These sequences each have their own probability.
+
+;;;; If we define our sequence to have length L and let the number of state
+;;;; labels be N the complexity of the algorithm is L + N + L^2*N or O(NL^2).
+
+;;;; Task 2
+;;;; 2a)
+
+(defstruct hmm
+  (states ) ;; tags
+  (n)      ;; (number of tags)
+  (transitions ) ;;transition probabilities
+  (emissions   )   ;;emission probabilities
+  )
+;;;;Our states could be a hastable that accepts tags and returns their numeric value 
+;;;;Our n value is simply the number of different types of tags
+
+;;;;The transitions are simply P(i|j), where i and j are numbers representing tags,
+;;;;which means they can efficiently be implemented into a matrix.
+
+;;;;The emission values however are structured like P(word,tag=i) = P(word|tag=i)
+;;;;To translate this into an efficient datastructure, we need to be able to call
+;;;;a function/structure that accepts both a number and then a word as input arguments.
+;;;;Sound like an array full of hashtables!
+
+;;;; 2b)
+
+(defun transition-probability (M i j &optional (default 0))
+  (let (( p  (aref (hmm-transitions M) i j)))
+    (if (= p 0) default p)))
+
+
+(defun emission-probability (M i word &optional (default 0))
+  (let (( e-array (hmm-emissions M)))
+      (gethash word (nth (-(state2id M i) 1) e-array) default)))
+
+		     
+(defun state2id (M tag)
+  (let ((tags (hmm-states M)))
+    (let ((index (position tag tags :test #'equal)))
+      (if index
+	  index
+	  (push tag (cdr(last tags))))
+      (position tag tags :test #'equal))))
+	  
+       
+
+;;;; 3
+;;;; 3a)
+(defparameter eisner (make-hmm
+		      :states (list 0)
+		      :n 2))
+
+(defun bigram-scanner (M tags)
+  (loop
+     :for i from 0 to (- (length tags) 1)
+     :do (setf (nth i tags) (state2id M (nth i tags)))))
+     
+
+
+(defun read-corpus (M file N-state)
+  (let (( L (+ N-state 1)))
+    (let(( t-mat (make-array (list L L))))
+      (let(( e-array  (list 0 0)))
+	(loop for i from 0 to (- N-state 1)
+	   :do (setf (nth i e-array) (make-hash-table :test #'equal)))
+	(with-open-file (stream file :direction :input)
+	  (loop
+	     :for i = 0 :then (+ i 1)
+	     :with forms = (list 0) :with states = (list 0)
+	     :for line = (read-line stream nil)
+	     :for tab = (position #\tab line)
+	     :for form = (subseq line 0 tab)
+	     :for state = (and tab (subseq line (+ tab 1)))
+	     
+	     :unless (and form state) :do
+	     (push 0 (cdr(last states)))
+	     
+	     :do (if (> i 0)
+		     (incf (aref t-mat (nth  i states) (nth ( - i 1) states))))
+	     
+	     :while line
+	     :when (and form state) :do
+	     (push form (cdr(last forms)))
+	     (push (state2id M state) (cdr(last states)))
+	     (cond((gethash form (nth (- (state2id  M state)1) e-array))
+		   (incf (gethash form (nth (- (state2id  M state)1) e-array))))
+		  (t
+		  (setf (gethash form (nth (- (state2id  M state)1) e-array)) 1)))))
+	     
+	     
+	
+	(setf (hmm-emissions M) e-array))
+      (setf (hmm-transitions M) t-mat)))
+  M)
+	  
+	
+
+(setf eisner (read-corpus eisner "eisner.tt" 2))
+
+(defun train-hmm (M)
+  (let
+      ((t-mat (hmm-transitions M) )
+       (e-array (hmm-emissions M) )
+       (n (hmm-n M)))
+    (loop
+       :for i from 0 to n
+       :for sum-trans = 0 then 0
+       :for sum-emit = 0 then 0
+       :do (loop
+	      :for j from 0 to n
+	      :do (setf sum-trans (+ sum-trans (aref t-mat j i))))
+       :if (< i n) :do
+       (loop
+	  :for counts being the hash-values of (nth i e-array)
+	  :do (setf sum-emit (+ sum-emit counts)))
+       
+       :do (loop
+	      :for j from 0 to n
+	      
+	      :unless (and (= j 0) (= i 0)) :do
+	      (setf (aref t-mat j i) (log(/ (aref t-mat j i) sum-trans))))
+       :if (< i n) :do
+       (loop
+	  :for keys being the hash-keys of (nth i e-array)
+	  :using (hash-value n_)
+	  :do (setf (gethash keys (nth i e-array))
+		    (log(/ n_  sum-emit)))))))
+
+(train-hmm eisner)
+
+(print (hmm-transitions eisner))
+(print (gethash "1" (nth 0 (hmm-emissions eisner))))
+(print (gethash "1" (nth 1 (hmm-emissions eisner))))
+(print (gethash "3" (nth 0 (hmm-emissions eisner))))
+(print (gethash "3" (nth 1 (hmm-emissions eisner))))
+(print (gethash "2" (nth 0 (hmm-emissions eisner))))
+(print (gethash "2" (nth 1 (hmm-emissions eisner))))
+
+
+;;;;REWRITE THIS FUCKING BULLSHIT
+;;;;4a)
+(defun Viterbi(M observations)
+  (let*(( obs (length observations))
+	( num-st (length ( cdr (hmm-states M))))
+	( states (hmm-states M))
+	( viterbi (make-array (list ( + num-st 2) ( + obs 2))))
+	( backtrace (make-array (list ( + num-st 2) (+ obs 2)))))
+    (setf states (cdr states))
+    (loop
+       :with ob = (first observations)
+       :for state from 1 to (- num-st 2)
+       :do (setf (aref viterbi state 0)
+		 (+ (transition-probability M 0 state (log(/ 1 1000000)))
+		    (emission-probability M (nth state states) ob (log(/ 1 1000000)))))
+       (setf (aref backtrace state 0) 0))
+    
+    
+    ;;(setf (aref viterbi 0 0) 1)
+    (loop
+       :for o from 1 to ( - obs 1)
+       :do
+       (loop
+	  :for s from 0 to ( - num-st 1) 
+	  :do
+	  (loop
+	     :for i from 0 to (- num-st 1)
+	     :for S_ = (nth i states)  
+	     :for
+	     new-score =  (+ (aref viterbi s ( - o 1))
+			     (transition-probability M s (state2id M S_) (log(/ 1 1000000)))
+			     (emission-probability M S_ (nth o observations) (log(/ 1 1000000))))
+	     
+	     :do (print (aref viterbi s o))
+	     :do (cond ((or (=(aref viterbi (state2id M S_) o) 0)
+			    (> new-score (aref viterbi (state2id M S_) o )))
+			(setf (aref viterbi (state2id M S_)  o ) new-score)
+			(setf (aref backtrace (state2id M S_)  o ) (nth s states))))
+			
+		       
+	     )))
+    (format t "~a ~%" viterbi)
+    (format t "~a ~%" backtrace)
+    ))
+
+
+(Viterbi eisner (list "1" "1" "3" "3" "3" "3" "1" "1" "1" "1"))
+    
