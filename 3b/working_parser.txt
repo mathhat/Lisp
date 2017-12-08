@@ -1,0 +1,87 @@
+
+(loop :for branch in tree
+	:if (consp branch) :collect (first branch) :else :collect branch
+	:do (if (consp branch)
+		(if (stringp (first(last branch)))
+		    (print branch)
+		    (rec branch))))
+
+;;;;below is a rule collecting add on that struggles remembering the lexemes due
+;;;;to the recursive calling happening elsewhere than the lexeme counting, I think
+
+
+(defun rec (tree &optional (i 0)  (lexemes (make-hash-table :test #'equal))  (syntax (make-hash-table :test #'equal )))
+  (let ((rule ))
+    (setf rule
+     (loop :for branch in tree
+	:if (consp branch) :collect (first branch) :else :collect branch
+	:do (if (consp branch)
+		(if (stringp (first(last branch)))
+		    (if (gethash (nth 0 branch) lexemes)       ;if we already have a hash table for the category
+			(if (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) ;if we already have the lexeme
+			    (incf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes))))  ;increment it
+			(progn
+			  (setf (gethash (nth 0 branch) lexemes) (make-hash-table :test #'equal)) ;if we don't have the category
+			  (setf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) 1)
+			  (print lexemes)))
+
+		    (rec branch lexemes)))))
+
+    ))
+
+;;;; the part that doesn't work
+
+ (if (gethash (nth 0 branch) lexemes)       ;if we already have a hash table for the category
+			(if (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) ;if we already have the lexeme
+			    (progn
+			      (incf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)))
+			      ))  ;increment it
+			(progn
+			  (setf (gethash (nth 0 branch) lexemes) (make-hash-table :test #'equal)) ;if we don't have the category
+			  (setf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) 1)
+			  ))
+;;;;; this works but gethashes only
+
+
+(defun rec (tree lexemes syntax &optional (i 0) )
+  (let ((rule )
+	(lex )
+	(syn '()))
+    (setf rule
+	  (loop :for branch in tree
+	     :if (consp branch) :collect (first branch) :else :collect branch
+	     :if (consp branch)
+	     :if (stringp (first(last branch)))
+	     :do (if (not(gethash (first branch) lexemes))
+		     (progn
+		       (setf (gethash (first branch) lexemes) (make-hash-table :test #'equal))
+		       (setf (gethash (first(last branch)) (gethash (first branch) lexemes))1))
+		     (if (gethash (first(last branch)) (gethash (first branch) lexemes))
+			 (incf (gethash (first(last branch)) (gethash (first branch) lexemes)))
+			 (setf (gethash (first(last branch)) (gethash (first branch) lexemes))1)))
+	     :else :do (rec branch lexemes syntax)))
+    (if (not (gethash (first rule) syntax))
+	(progn
+	  (setf (gethash (first rule) syntax) (make-hash-table :test #'equal))
+	  (setf (gethash (rest rule) (gethash (first rule) syntax)) 1))
+	(if (gethash (rest rule) (gethash (first rule) syntax))
+	    (incf (gethash (rest rule) (gethash (first rule) syntax)))
+	    (setf (gethash (rest rule) (gethash (first rule) syntax)) 1)))
+    ))
+
+(loop for key being the hash-keys in (grammar-lexemes gram)
+   :for vals being the hash-values in (grammar-lexemes gram)
+   :do (print key)
+   :do (loop for strings being the hash-keys in vals
+	  for cunts being the hash-values in vals
+	  :do (print strings)
+	  ;;:do (print cunts)))
+	    ))
+
+(loop for key being the hash-keys in (grammar-rules gram)
+   :for vals being the hash-values in (grammar-rules gram)
+   :do (print key)
+   :do (loop for strings being the hash-keys in vals
+	  for cunts being the hash-values in vals
+	  :do (print strings)
+	  :do (print cunts))) 

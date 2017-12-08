@@ -89,19 +89,19 @@
 ;;;; 2b)
 
 (defun transition-probability (M i j &optional (default 0))
-  (let (( p  (aref (hmm-transitions M) i j)))
-    (if (= p 0) default p)))
+  (let (( p  (aref (hmm-transitions M) i j)))  ;;find the transition matrix element of state i and j
+    (if (= p 0) default p)))                   ;;if it has a zero prob, we return the optional argument
 
 
 (defun emission-probability (M i word &optional (default 0))
-  (let (( e-array (hmm-emissions M)))
-      (gethash word (nth (-(state2id M i) 1) e-array) default)))
-
+  (let (( e-array (hmm-emissions M)))          ;;emission array (list)
+      (gethash word (nth (-(state2id M i) 1) e-array) default))) ;;get the hashvalue of form/word
+                                                                 ;;given a tag i. i is in string form 
 		     
 (defun state2id (M tag)
   (let ((tags (hmm-states M)))
-    (let ((index (position tag tags :test #'equal)))
-      (if index
+    (let ((index (position tag tags :test #'equal))) ;;returns nil if element doesn't exist in list
+      (if index  ;if nil, push new tag into states, if already in list, return its numeric value (its index)
 	  index
 	  (push tag (cdr(last tags))))
       (position tag tags :test #'equal))))
@@ -110,142 +110,225 @@
 
 ;;;; 3
 ;;;; 3a)
-(defparameter eisner (make-hmm
-		      :states (list 0)
-		      :n 2))
 
-(defun bigram-scanner (M tags)
-  (loop
-     :for i from 0 to (- (length tags) 1)
-     :do (setf (nth i tags) (state2id M (nth i tags)))))
-     
-
-
-(defun read-corpus (M file N-state)
-  (let (( L (+ N-state 1)))
-    (let(( t-mat (make-array (list L L))))
-      (let(( e-array  (list 0 0)))
-	(loop for i from 0 to (- N-state 1)
-	   :do (setf (nth i e-array) (make-hash-table :test #'equal)))
-	(with-open-file (stream file :direction :input)
-	  (loop
-	     :for i = 0 :then (+ i 1)
-	     :with forms = (list 0) :with states = (list 0)
-	     :for line = (read-line stream nil)
-	     :for tab = (position #\tab line)
-	     :for form = (subseq line 0 tab)
-	     :for state = (and tab (subseq line (+ tab 1)))
-	     
-	     :unless (and form state) :do
-	     (push 0 (cdr(last states)))
-	     
-	     :do (if (> i 0)
-		     (incf (aref t-mat (nth  i states) (nth ( - i 1) states))))
-	     
-	     :while line
-	     :when (and form state) :do
-	     (push form (cdr(last forms)))
-	     (push (state2id M state) (cdr(last states)))
-	     (cond((gethash form (nth (- (state2id  M state)1) e-array))
-		   (incf (gethash form (nth (- (state2id  M state)1) e-array))))
-		  (t
-		  (setf (gethash form (nth (- (state2id  M state)1) e-array)) 1)))))
-	     
-	     
-	
-	(setf (hmm-emissions M) e-array))
-      (setf (hmm-transitions M) t-mat)))
-  M)
+(defun read-corpus (file N-state)
+  (let(( M (make-hmm :states (list 0) :n N-state)))
+    (let (( L (+ N-state 1)))                 ;number of states (s and /s are = 0)
+      (let(( t-mat (make-array (list L L))))  ;transition matrix
+	(let(( e-array  (list )))          ;emition is a tuple where each index is a hash
+	  (loop for i from 0 to (- N-state 1)
+	     :do (push (make-hash-table :test #'equal) e-array)) ;create hashes which will hold emition probabilities
+	  (with-open-file (stream file :direction :input)
+	    (loop
+	       :for i = 0 :then (+ i 1)
+	       :with forms = (list 0) :with states = (list 0) ;copy paste from the evaluation.lisp file
+	       :for line = (read-line stream nil)             
+	       :for tab = (position #\tab line)
+	       :for form = (subseq line 0 tab)
+	       :for state = (and tab (subseq line (+ tab 1)))
+	       :while line
+	       :do (print i)
+	       :unless (and form state) :do ;if there's no state or form, it's
+	       (push 0 (cdr(last states)))  ;an s or /s, which both are zeros
+					;in my state notation. "H", "C" and 0
+	       :do (if (> i 0) ;after one iteration, we can start counting bigram state-occurences
+		       (incf (aref t-mat (nth  i states) (nth ( - i 1) states)))) 
+	       :when (and form state) :do
+	       (push form (cdr(last forms))) ;;adding forms and states to a list for counting (above if expression)
+	       (push (state2id M state) (cdr(last states)))
+	       (if (gethash form (nth (- (state2id  M state)1) e-array))  ;;counting emissions
+		   (incf (gethash form (nth (- (state2id  M state)1) e-array)))
+		   (setf (gethash form (nth (- (state2id  M state)1) e-array)) 1))))
+	  
+	  (setf (hmm-emissions M) e-array)
+	  (setf (hmm-transitions M) t-mat)
+	  M)))))
 	  
 	
+#|
+(defun read-corpus (file N-state)
+  (let(( M (make-hmm :states (list 0) :n N-state)))
+    (let (( L (+ N-state 1)))                 ;number of states (s and /s are = 0)
+      (let(( t-mat (make-array (list L L) )))  ;transition matrix
+	(let(( e-array  (list )))          ;emition is a tuple where each index is a hash
+	  (loop for i from 0 to (- N-state 1)
+	     :do (push (make-hash-table :test #'equal) e-array)) ;create hashes which will hold emition probabilities
+	  (with-open-file (stream file :direction :input)
+	    (loop
+	       :for i from 0 to 100
+	       :with forms = (list 0) :with states = (list 0) ;copy paste from the evaluation.lisp file
+	       :for line = (read-line stream nil)             
+	       :for tab = (position #\tab line)
+	       :for form = (subseq line 0 tab)
+	       :for state = (and tab (subseq line (+ tab 1)))
+	       :unless (and form state) :do ;if there's no state or form, it's
+	       (push 0 (cdr(last states)))  ;an s or /s, which both are zeros
+					;in my state notation. "H", "C" and 0
+	       :do (if (> i 0) ;after one iteration, we can start counting bigram state-occurences
+		       (incf (aref t-mat (nth ( - i 1) states)  (nth  i states)))) 
+	       
+	       :when (and form state) :do
+	       (push form (cdr(last forms))) ;;adding forms and states to a list for counting (above if expression)
+	       (push (state2id M state) (cdr(last states)))
+	       (cond((gethash form (nth (- (state2id  M state)1) e-array))  ;;counting emissions
+		     (incf (gethash form (nth (- (state2id  M state)1) e-array))))
+		    (t
+		     (setf (gethash form (nth (- (state2id  M state)1) e-array)) 1)))))
+	  
+	  
+	  
+	  (setf (hmm-emissions M) e-array))
+	(setf (hmm-transitions M) t-mat)))
+    M))
 
-(setf eisner (read-corpus eisner "eisner.tt" 2))
+|#	
+
+(defparameter eisner (read-corpus "eisner.tt" 2))
 
 (defun train-hmm (M)
   (let
       ((t-mat (hmm-transitions M) )
        (e-array (hmm-emissions M) )
-       (n (hmm-n M)))
+       (n  (hmm-n M)))
     (loop
        :for i from 0 to n
        :for sum-trans = 0 then 0
-       :for sum-emit = 0 then 0
+       :for sum-emit = 0 then 0  ;;things we divide by
        :do (loop
 	      :for j from 0 to n
-	      :do (setf sum-trans (+ sum-trans (aref t-mat j i))))
+	      :do (setf sum-trans (+ sum-trans (aref t-mat i j))))
        :if (< i n) :do
        (loop
 	  :for counts being the hash-values of (nth i e-array)
 	  :do (setf sum-emit (+ sum-emit counts)))
        
-       :do (loop
-	      :for j from 0 to n
-	      
-	      :unless (and (= j 0) (= i 0)) :do
-	      (setf (aref t-mat j i) (log(/ (aref t-mat j i) sum-trans))))
-       :if (< i n) :do
+       :if (and (> i 0) (> sum-trans 0)) :do
+       (loop
+	  :for j from 1 to n
+	  :do (setf (aref t-mat i j) (log(/ (aref t-mat i j) sum-trans))))
+       
+       :if (and (< i n) (> sum-emit 0)) :do
        (loop
 	  :for keys being the hash-keys of (nth i e-array)
 	  :using (hash-value n_)
 	  :do (setf (gethash keys (nth i e-array))
-		    (log(/ n_  sum-emit)))))))
+		    (log(/ n_  sum-emit)))))(print t-mat))) ;;turn probs into log values
 
 (train-hmm eisner)
 
-(print (hmm-transitions eisner))
-(print (gethash "1" (nth 0 (hmm-emissions eisner))))
-(print (gethash "1" (nth 1 (hmm-emissions eisner))))
-(print (gethash "3" (nth 0 (hmm-emissions eisner))))
-(print (gethash "3" (nth 1 (hmm-emissions eisner))))
-(print (gethash "2" (nth 0 (hmm-emissions eisner))))
-(print (gethash "2" (nth 1 (hmm-emissions eisner))))
-
-
-;;;;REWRITE THIS FUCKING BULLSHIT
 ;;;;4a)
-(defun Viterbi(M observations)
+
+(defun Viterbi(M observations) ;;not sure if works, see output/prints
   (let*(( obs (length observations))
 	( num-st (length ( cdr (hmm-states M))))
-	( states (hmm-states M))
+	( states (rest(hmm-states M)))
+	( smooth (log 1/1000000))
 	( viterbi (make-array (list ( + num-st 2) ( + obs 2))))
 	( backtrace (make-array (list ( + num-st 2) (+ obs 2)))))
-    (setf states (cdr states))
     (loop
-       :with ob = (first observations)
-       :for state from 1 to (- num-st 2)
-       :do (setf (aref viterbi state 0)
-		 (+ (transition-probability M 0 state (log(/ 1 1000000)))
-		    (emission-probability M (nth state states) ob (log(/ 1 1000000)))))
-       (setf (aref backtrace state 0) 0))
-    
-    
-    ;;(setf (aref viterbi 0 0) 1)
+       :for s in states ;;initial state probabilities
+       :with o = (nth 0 observations)
+       :do (setf (aref viterbi (state2id M s) 0)
+		 ( + (transition-probability M 0 (state2id M s) smooth)
+		     (emission-probability M s o smooth))))    
     (loop
-       :for o from 1 to ( - obs 1)
-       :do
+       :for timestep from 1 to (- obs 1) ;;the rest
+       :for o in (rest observations) :do
        (loop
-	  :for s from 0 to ( - num-st 1) 
-	  :do
+	  :for s in states :do ;;curent
 	  (loop
-	     :for i from 0 to (- num-st 1)
-	     :for S_ = (nth i states)  
-	     :for
-	     new-score =  (+ (aref viterbi s ( - o 1))
-			     (transition-probability M s (state2id M S_) (log(/ 1 1000000)))
-			     (emission-probability M S_ (nth o observations) (log(/ 1 1000000))))
-	     
-	     :do (print (aref viterbi s o))
-	     :do (cond ((or (=(aref viterbi (state2id M S_) o) 0)
-			    (> new-score (aref viterbi (state2id M S_) o )))
-			(setf (aref viterbi (state2id M S_)  o ) new-score)
-			(setf (aref backtrace (state2id M S_)  o ) (nth s states))))
-			
-		       
-	     )))
-    (format t "~a ~%" viterbi)
-    (format t "~a ~%" backtrace)
+	     :for s_ in (rest (hmm-states M)) ;;previous
+	     :for trans =  (transition-probability M (state2id M s_) (state2id M s) smooth) 
+	     :for vito = (aref viterbi (state2id M s_) ( - timestep 1)) ;;earlier path probability
+	     :for emit = (emission-probability M s o smooth)
+	     :for p = (+ trans emit vito) 
+	    
+	     :do (cond( (or (> p (aref viterbi (state2id M s) timestep))
+			    (= (aref viterbi (state2id M s) timestep) 0))
+		       (setf (aref viterbi (state2id M s) timestep) p)
+			(setf (aref backtrace (state2id M s) timestep) s_))) )))
+    
+    
+    (loop
+       :for s in states ;;probability of getting to final state
+       :for trans =  (transition-probability M (state2id M s) 0 smooth) 
+       :for vito = (aref viterbi (state2id M s) (- obs 1))
+       :for p = (+ trans vito)
+       :do (cond( (or (> p  (aref viterbi (state2id M s) obs ))
+		      (= (aref viterbi (state2id M s) obs ) 0))
+		  (setf (aref viterbi (state2id M s) obs) p)
+		  (setf (aref backtrace (length states) obs) s))))
+
+    (let(( tags  (list  ) ) ;;my backtracer looks at the most plausible earlier element in the viterbi matrix
+	 ( probs (make-array (list num-st))))
+      
+      (loop :for timestep from 0 to (- obs 1) :do
+	 (loop :for s in states :do
+	    (setf (aref probs ( - (state2id M s) 1 )) (aref viterbi (state2id M s) (- obs timestep))))
+	 (loop :for s from 0 to (- num-st 2)
+	    :for prob1 = (aref probs s)
+	    :for prob2 = (aref probs (+ s 1))
+	    :do (if (> (aref probs s) (aref probs (+ s 1)))
+		    (push  (nth s states) tags)
+		    (push  (nth (+ s 1) states) tags)))
+	 )
+
+
+    
+    #|(loop
+       with tags = (hmm-states M)
+       with final = (state2id M(aref backtrace num-st obs))
+       with result = (list (elt tags final))
+       for i from (- obs 1) downto 1
+       for state = (state2id M (aref backtrace final i)) then (state2id M (aref backtrace state i))
+       ;;:do (print tags)
+       ;;:do (print result)
+	 
+       :do (push (elt tags state) result)
+       finally (return result))
+    |#
+    
+
+    tags)
     ))
 
 
-(Viterbi eisner (list "1" "1" "3" "3" "3" "3" "1" "1" "1" "1"))
-    
+
+;;(Viterbi eisner '("1" "1" "3" "3" "3" "3" "1" "1" "1" "1"))
+;;(format t "I got stuck here for a while (4a). It seems that my probabilities are 
+;;incorrect ~% or that my backtracing methods are incorrect. Perhaps both? ~%")
+
+(defun evaluate-hmm (hmm file)
+  (with-open-file (stream file :direction :input)
+    (loop
+       with total = 0 with correct = 0
+       with forms with states
+       for line = (read-line stream nil)
+       for tab = (position #\tab line)
+       for form = (subseq line 0 tab)
+       for state = (and tab (subseq line (+ tab 1)))
+       while line
+       when (and form state) do
+	 (push form forms)
+	 (push state states)
+       else do
+	 (loop
+	    for gold in (nreverse states)
+              for state in (viterbi hmm (nreverse forms))
+	    do (incf total)
+	    when (string= gold state) do (incf correct))
+	 (setf forms nil) (setf states nil)
+       finally (return (float (/ correct total))))))
+
+(print (evaluate-hmm eisner "~/Documents/inf4820/Lisp/3a/eisner.tt"))
+
+(defparameter M (read-corpus "wsj.tt" 45))
+(print M)
+(defparameter wsj (train-hmm M))
+(print (viterbi wsj '("No" "," "it" "was" "n’t" "Black" "Monday" ".")))
+(print (viterbi wsj '("No" "," "it" "was" "n't" "Black" "Monday" ".")))
+(print (evaluate-hmm wsj "~/Documents/inf4820/Lisp/3a/test.tt"))
+
+;;I am not able to evaluate since I return my path of states as an array instead of a lisp.
+;;I am sorry for not being able to fix this as I have 10 minutes to deliver and need to
+;;comment on my code

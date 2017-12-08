@@ -1,0 +1,42 @@
+
+(loop :for branch in tree
+	:if (consp branch) :collect (first branch) :else :collect branch
+	:do (if (consp branch)
+		(if (stringp (first(last branch)))
+		    (print branch)
+		    (rec branch))))
+
+;;;;below is a rule collecting add on that struggles remembering the lexemes due
+;;;;to the recursive calling happening elsewhere than the lexeme counting, I think
+
+
+(defun rec (tree &optional (i 0)  (lexemes (make-hash-table :test #'equal))  (syntax (make-hash-table :test #'equal )))
+  (let ((rule ))
+    (setf rule
+     (loop :for branch in tree
+	:if (consp branch) :collect (first branch) :else :collect branch
+	:do (if (consp branch)
+		(if (stringp (first(last branch)))
+		    (if (gethash (nth 0 branch) lexemes)       ;if we already have a hash table for the category
+			(if (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) ;if we already have the lexeme
+			    (incf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes))))  ;increment it
+			(progn
+			  (setf (gethash (nth 0 branch) lexemes) (make-hash-table :test #'equal)) ;if we don't have the category
+			  (setf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) 1)
+			  (print lexemes)))
+
+		    (rec branch lexemes)))))
+
+    ))
+
+;;;; the part that doesn't work
+
+ (if (gethash (nth 0 branch) lexemes)       ;if we already have a hash table for the category
+			(if (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) ;if we already have the lexeme
+			    (progn
+			      (incf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)))
+			      ))  ;increment it
+			(progn
+			  (setf (gethash (nth 0 branch) lexemes) (make-hash-table :test #'equal)) ;if we don't have the category
+			  (setf (gethash (nth 1 branch) (gethash (nth 0 branch) lexemes)) 1)
+			  ))

@@ -200,17 +200,17 @@
 
 
 
-;;;;OBLIG 2B
+;;;;;;;;;;;;;;;;;;;;;;;;;;;OBLIG 2B;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;; 1a
-(defun compute-proximities (space-vs)
-  (let ((sim-mat (make-hash-table :test #'equal)))
-    (dolist (word1 *words*)
+(defun compute-proximities (space-vs) 
+  (let ((sim-mat (make-hash-table :test #'equal))) ;similarity matrix
+    (dolist (word1 *words*)    ;each feature word will iterate through all feature words
       (setf (gethash word1 sim-mat)
-	    (let ((vec (make-hash-table :test #'equal)))
-	      (dolist(word2 *words*)
-		(setf (gethash word2 vec)
-		      (word-similarity space-vs word1 word2)))vec)))
+	    (let ((vec (make-hash-table :test #'equal))) ;sim vector
+	      (dolist(word2 *words*)   
+		(setf (gethash word2 vec)  ;set vector indice to similarity product
+		      (word-similarity space-vs word1 word2)))vec)))   ;return to vectorspace
     (setf (vs-similarity-matrix space-vs) sim-mat)  ))
 
 ;;returns similarity vector into similarity matrix
@@ -218,46 +218,54 @@
 
 
 
-(defun get-proximities (space word1 word2)
-  (let ((mat (vs-similarity-matrix space)))
-    (let((vec (gethash word1 mat)))
-      (gethash word2 vec))))
+(defun get-proximities (space word1 word2) ;;simple function where we collect a value form a matrix
+  (let ((mat (vs-similarity-matrix space)));;index 1
+    (let((vec (gethash word1 mat)))        ;;index 2
+      (gethash word2 vec))))               ;;return mat(index1,index2)
 
 ;(print(get-proximities space-vs "potato" "food"))
 
 
 ;;;;1b
 
+
 (defun knn (space word k)
-  (let (( words (list )))
-    (let (( unsorted (list )))
-      (let (( sorted (list )))
-	(setf words (loop
+  (let (( words (list )))      ;;i like having the hash keys in a list when I wrote this
+    (let (( unsorted (list ))) ;;storing co occurences in this baby (needed for indice data too)
+      (let (( sorted (list ))) ;;find the max of the co occurences here
+	(setf words (loop      ;;filling words with keys that are words
 		       :for Word being the hash-keys in (gethash word (vs-similarity-matrix space))
 		       :collect Word))
-	(setf unsorted (loop
+	(setf unsorted (loop   ;;cooccurences of words
 			:for proximity being the hash-values in  (gethash word (vs-similarity-matrix space))
 			:collect proximity))
-	(setf sorted (sort unsorted #'>))	
+	(setf sorted (sort unsorted #'>)) ;Creating a sorted list of co occurences
 	(loop
 	   :for i from 1 to k
 	   :collect (nth (position (nth i sorted) unsorted  ) words)
+	   ;;using the unsorted list to find corresponding words with cooccurences
 	   )))))
 
-;(print(knn space-vs "potato" 20))
+
+;(print(knn space-vs "potato" 20))   ;;Try it out with any word or word count
+
 ;;;;2a
+
+;;;; For this task, I need a new string normalizer since my -
+;;;;last one isn't applicable to the read functions return values.
+
 (defun normalize_word (string)
-  (setf string (remove-if-not #'alphanumericp (string-downcase string))))
+  (setf string (remove-if-not #'alphanumericp (string-downcase string))))  
 
 
 (defun read-classes (filename)
-  (with-open-file (in filename :direction :input)
-    (let(( classes (make-hash-table :test #'equal)))
+  (with-open-file (in filename :direction :input) ;;;Makes stuff into stirng
+    (let(( classes (make-hash-table :test #'equal))) ;;;classes will be a hash
       (loop
-	 :for i = (read in nil nil)  
-	 while i
-	 :do (setf(gethash  (normalize_word (car i) )  classes)
-		  (mapcar #'normalize_word (car(cdr i) ))))
+	 :for i = (read in nil nil)         ;;; nil nil because yolo
+	 while i ;;while line exists
+	 :do (setf(gethash  (normalize_word (car i) )  classes) ;;normalize class title
+		  (mapcar #'normalize_word (car(cdr i) ))))     ;;normalize class word list
       (setf (vs-classes space-vs) classes))))
 
 (read-classes "classes.txt")
@@ -268,38 +276,86 @@
 ;;;; and a normalize-centroids function (based on normalizing a matrix in oblig2a)
 
 (defun normalize-centroids (centroids)   ;vector space struct as argument
-    (loop for centroid being the hash-values of centroids  ;;for centroid
-       :do (let((norm (euclidean-norm centroid) ))         ;;define norm
-	     (loop for key being the hash-keys of centroid ;;for value in vectot
-		:do (setf (gethash key centroid) (/  (gethash key centroid) norm))))) ;;divide every value with norm
-    centroids)             ;;return normalized matrix into vector space, space-vs
+  (loop for centroid being the hash-values of centroids  ;;for centroid
+     :do (let((norm (euclidean-norm centroid) ))         ;;define norm
+	   (loop for key being the hash-keys of centroid ;;for value in vectot
+	      :do (setf (gethash key centroid) (/  (gethash key centroid) norm))))) ;;divide every value with norm
+  centroids)             ;;return normalized matrix into vector space, space-vs
 
 
 (defun vector-add (v1 v2) ;;Having this guy makes the centroids easier to compute
   (let (( v3 (make-hash-table :test #'equal)))
     (loop for keys being the hash-keys in v2	 
-       :do (if (gethash keys v1) (setf (gethash keys v3) (+ (gethash keys v1) (gethash keys v2))))
+       :do (if (gethash keys v1) (setf (gethash keys v3) (+ (gethash keys v1) (gethash keys v2)))) ;;adding elements unique to v1
        :do (unless (gethash keys v1) (setf (gethash keys v3) (gethash keys v2))))
     (loop for keys being the hash-keys in v1	 
-       :do (if (gethash keys v2) (setf (gethash keys v3) (+ (gethash keys v1) (gethash keys v2))))
-       :do (unless (gethash keys v2) (setf (gethash keys v3) (gethash keys v1))))v3))
+       :do (if (gethash keys v2) (setf (gethash keys v3) (+ (gethash keys v1) (gethash keys v2)))) ;;adding elements unique to v2
+       :do (unless (gethash keys v2) (setf (gethash keys v3) (gethash keys v1))))v3))              ;;return vector sum as v3
 
 (defun compute-class-centroids (space)
   (let ((centroids (make-hash-table :test #'equal)))
     (let ((class-hash (vs-classes space)))
       (let ((feature-vectors (vs-matrix space)))
 	(loop
-	   :for class being the hash-keys in class-hash
-	   :do (setf (gethash class centroids) (let (( feat-vec (make-hash-table :test #'equal)))
-						 (loop
-						    :for word in (gethash class class-hash)
-						    :for vec = (vector-add feat-vec (gethash word feature-vectors))
-						    :then (vector-add vec (gethash word feature-vectors))
-						    :do (setf feat-vec vec))(/ feat-vec (length  (gethash class class-hash) )) )))))
-    
-    (let (( centroids (normalize-centroids centroids)))
-      (setf (vs-rocchio space-vs) centroids))))
+	   :for class being the hash-keys in class-hash  ;;for class
+	   :do (setf (gethash class centroids)           ;;set centroid vector as
 
-;;;;2c
+		     (let (( feat-vec (make-hash-table :test #'equal)))
+		       (loop
+			  :for word in (gethash class class-hash)
+			  :for vec = (vector-add feat-vec (gethash word feature-vectors)) ;;sum of vectors
+			  :then (vector-add vec (gethash word feature-vectors))
+			  :do (setf feat-vec vec))
+
+		       (loop
+			  :for keys being the hash-keys in feat-vec
+			  :do (setf
+			       (gethash keys feat-vec)                                 ;;divide each element by number of elements in class
+			       (/ (gethash keys feat-vec)
+				  (length (gethash class class-hash)))))feat-vec)))))
+    
+    (let (( centroids (normalize-centroids centroids))) ;;normalizing the centroids then returning them
+      (setf (vs-rocchio space-vs) centroids))))
+(compute-class-centroids space-vs) ;;function call so that last function may work
+
+
+;;;;;2c
 (defun rocchio-classify (space)
-  (let (( centroids  (vs-rocchio space)))
+    (let (( centroids  (vs-rocchio space)))                         ;;centroids
+      (let (( biggest-product (make-hash-table :test #'equal)))     ;;this guy saves highest dot product and the responsible class/centroid
+	(loop
+	   :for words in (gethash "unknown" (vs-classes space))     ;;for words in uknown
+	   :do(let ((max 0))  ;;biggest dot product parameter
+		(loop
+		   :for class being the hash-keys in centroids      ;;for classname
+		   :for vecprod = (dot-product (gethash words (vs-matrix space)) (gethash class centroids)) ;;vectorproduct between feature vector and centroid
+		   :do (cond ((< max vecprod)                    ;; if new max is found
+			      (unless (string= class "unknown")  ;; if class is not uknown
+				  (setf max vecprod)             ;; set new max dot product
+				  (setf (gethash words biggest-product) (list max class))))))) ;;save dot product and class name
+	   :do (format t "~s  ~a  ~%"words (gethash words biggest-product))   )))) ;; print class name, dot product and feature word.
+
+(rocchio-classify space-vs) ;;call
+	 
+								     
+		  
+;;;;2d
+;;;;Using hash tables for the centroid vectors is nice because it -
+;;;;saves resources and our dot product function is only usable on hash tables.
+;;;;I've also made the dot product only iterate through the feature vectors.
+;;;;Which means that we don't have to iterate through the entire centroids as  -
+;;;;they are bigger than the feature vectors. After all, the only indice we
+;;;;need to care for are the ones they have in common.
+
+
+;;;;3a
+;;;;kNN tells us the direct relation between words while
+;;;;Rocchio tells us the overall relation between one word and a group of words (class)
+
+;;;;3b
+;;;;Rocchio-classification knows more about initial classification beforehand.
+;;;;This sets it apart from the k means method by becoming an supervised learning clustering algorithm.
+;;;;k means knows not of words being in the same cluster/class beforehand.
+
+;;;;3c
+;;;;In order to evaluate, we need an exact solution of classifiers to compare to.

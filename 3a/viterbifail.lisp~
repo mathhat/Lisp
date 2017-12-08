@@ -1,0 +1,18 @@
+
+    (loop
+       :for timestep from 1 to obs 
+       :for o in (rest observations) :do
+       (loop
+	  :for s in states :do
+	  (loop
+	     :for s_ in (rest (hmm-states M))
+	     :for trans =  (transition-probability M (state2id M s) (state2id M s_) smooth)
+	     :for vito = (aref viterbi (state2id M s) ( - timestep 1))
+	     :for emit = (emission-probability M s_ o smooth)
+	     :for p = (+ trans emit vito) 
+	    
+	     :do (cond( (or (> p (aref viterbi (state2id M s_) timestep))
+			    (= (aref viterbi (state2id M s_) timestep) 0))
+		       (setf (aref viterbi (state2id M s_) timestep) p)
+			(setf (aref backtrace (state2id M s_) timestep) s_))) )))
+    

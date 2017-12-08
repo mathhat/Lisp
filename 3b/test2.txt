@@ -1,0 +1,6 @@
+(S 	(NP	(NNP "Frodo")) 
+	(VP (VBD "gave") 
+		(NP (DT "the") 
+			(NN "ring")) 
+		(PP (P "to") 
+			(NP (NNP "Sam")))))
